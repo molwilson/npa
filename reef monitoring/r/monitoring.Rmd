@@ -1,0 +1,38 @@
+---
+title: "NPA long-term reef monitoring"
+author: "Molly Wilson"
+date: "7/20/2022"
+output: 
+  html_document:
+    code_folding: hide
+---
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+# library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+raw_fish <- read.csv(here("reef monitoring", "data", "fish.csv"), header = FALSE) %>%  
+  clean_names()
+metadata <- tibble(surveyor = fish[1,2], date = fish[1,8], site = fish[1,5], transect = fish[2,2], 
+                   depth_start = fish[3,3], depth_end = fish[3,5], temp = fish[3,7])
+fish <- raw_fish %>% 
+  filter(row_number() %in% 5:23) %>%
+  select(-v2) %>%
+  row_to_names(1) %>%
+  clean_names() %>%
+  mutate_all(funs(replace(., .=="", 0))) %>% # replace all empty cells with 0
+  pivot_longer(!fish_groups, names_to = "size_bin", values_to = "count") %>%
+  mutate_at("size_bin", str_replace, "x", "") %>% 
+  cbind(metadata)
+```
+
+Question at this point is.... how are we going to process large amounts of inputted data?
+
