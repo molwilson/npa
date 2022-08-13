@@ -1,0 +1,72 @@
+---
+title: "NPA long-term reef monitoring"
+author: "Molly Wilson"
+date: "7/20/2022"
+output: 
+  html_document:
+    code_folding: hide
+---
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+# Fish
+
+What stats/graphs do we want?
+- overall abundance by group at each site/date
+- overall abundance by group over time (panel?)
+- size distributions within each group (panel)
+```{r}
+fish_raw <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "fish") %>%  
+  clean_names()
+fish_groups <- c("Doctorfish", "Snapper") # names of fish groups that have size data
+
+
+# calculating overall density by group at each site (regardless of size bin)
+density <- fish_raw %>%
+  expand(nesting(site, date, transect), group) %>%
+  left_join(fish_raw %>%
+              select(site, date, transect, group, count) %>%
+              group_by(site, date, transect, group) %>%
+              summarize(count = sum(count))) %>%
+  mutate(count = if_else(is.na(count), 0, count), # replaces all entries not observed with 0
+         density = count/60) %>%
+  group_by(site, date, group) %>%
+  summarize(count_mean = mean(count),
+            density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+density_size <- fish_raw %>%
+  filter(group %in% c("Doctorfish", "Snapper")) %>%
+  expand(nesting(site, date, transect), group, size_bin) %>% # expand df to include all possible groups/size bins
+  left_join(fish_raw %>%
+              filter(group %in% c("Doctorfish", "Snapper")) %>%
+              select(site, date, transect, group, size_bin, count)) %>%
+  mutate(count = if_else(is.na(count), 0, count),
+         density = count/60) %>% 
+  group_by(site, date, group, size_bin) %>%
+  summarize(count_mean = mean(count),
+            density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+```
+
+# Benthic
+```{r}
+benthic <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "benthic") %>%  
+  clean_names()
+```
+
+# Invertebrates
+```{r}
+inverts <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "inverts") %>%  
+  clean_names()
+
+```
