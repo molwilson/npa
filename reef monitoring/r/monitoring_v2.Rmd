@@ -72,7 +72,10 @@ fish_density_grp <- fish %>%
 
 ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
   geom_col() +
-  facet_grid(site ~ group)
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(site ~ group) +
+  theme_bw()
 
 # calculating density of fish groups of each size bin by site and date 
 fish_density_size <- fish %>%
@@ -90,6 +93,8 @@ fish_density_size <- fish %>%
 
 ggplot(fish_density_size, aes(x = size_bin, y = density_mean, fill = factor(year))) +
   geom_col(position = "dodge") +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
   facet_grid(group ~ site) +
   theme_bw()
 ```
@@ -105,17 +110,22 @@ benthic <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "
          year = year(date))
 
 benthic_heights <- benthic %>%
-  group_by(date, year, site, transect) %>%
-  summarize(ma_height = mean(macroalgal_height),
-            ta_height = mean(turf_algal_height)) %>%
-  group_by(date, year, site) %>%
-  summarize(ma_height_mean = mean(ma_height),
-            ma_height_se = sd(ma_height)/sqrt(n()),
-            ta_height_mean = mean(ta_height),
-            ta_height_se = sd(ta_height)/sqrt(n()))
-# mnaybe pivot_longer for algal type?
+  pivot_longer(cols = ends_with("height"), #turn two algal height columns into two rows, will help for graphs/analysis
+               names_to = "algal_type", # create column to distinguish whether height is macroalgae vs turf algae
+               names_pattern = "(.*)_height", # removes "height" from end of new "algal_type" cell
+               values_to = "height") %>% # values are identified as heights
+  group_by(date, year, site, algal_type, transect) %>%
+  summarize(height = mean(height)) %>%
+  group_by(date, year, site, algal_type) %>%
+  summarize(height_mean = mean(height),
+            height_se = sd(height)/sqrt(n()))
 
-ggplot(benthic_heights)
+ggplot(benthic_heights, aes(x = algal_type, y = height_mean)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = height_mean - height_se, ymax = height_mean + height_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(site ~ year) +
+  theme_bw()
 ```
 
 # Invertebrates
@@ -123,6 +133,31 @@ What stats/graphs do we want?
 - abundance by site over time
 ```{r}
 inverts <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "inverts") %>%  
-  clean_names()
+  clean_names() %>%
+  mutate(date = ymd(date),
+         year = year(date))
 
+invert_density <- inverts %>%
+  expand(nesting(site, date, year, transect), group) %>%
+  left_join(inverts %>%
+              select(site, date, year, transect, group, count)) %>%
+  mutate(density = count / 60) %>%
+  group_by(date, year, site, group) %>%
+  summarize(count_mean = mean(count),
+            density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(invert_density, aes(x = factor(year), y = density_mean)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(site ~ group) +
+  theme_bw()
+
+ggplot(invert_density, aes(x = group, y = density_mean)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(site ~ year) +
+  theme_bw()
 ```
