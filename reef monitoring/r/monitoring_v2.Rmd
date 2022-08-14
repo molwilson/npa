@@ -14,6 +14,7 @@ library(here)
 library(readxl) 
 library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(lubridate) # for extracting different components of date data
 library(knitr) # for including tables
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -24,47 +25,102 @@ What stats/graphs do we want?
 - overall abundance by group at each site/date
 - overall abundance by group over time (panel?)
 - size distributions within each group (panel)
+
+To do list:
+- add herbivore-specific
+- add option for custom simple graphs of just one site/year
+- fix labels and colors
 ```{r}
-fish_raw <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "fish") %>%  
-  clean_names()
+fish <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "fish") %>%  
+  clean_names() %>%
+  mutate(date = ymd(date),
+         year = year(date))
+
 fish_groups <- c("Doctorfish", "Snapper") # names of fish groups that have size data
 
 
-# calculating overall density by group at each site (regardless of size bin)
-density <- fish_raw %>%
-  expand(nesting(site, date, transect), group) %>%
-  left_join(fish_raw %>%
+# calculating density of all fish by site and date
+fish_density_tot <- fish %>%
+  filter(group %in% fish_groups) %>%
+  group_by(date, year, transect) %>%
+  summarize(count_tot = sum(count),
+            density = count_tot/60) %>%
+  group_by(date, year) %>%
+  summarize(count_mean = mean(count_tot),
+            density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(fish_density_tot, aes(x = as.character(year), y = density_mean)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  theme_bw()
+
+# calculating density of each group by site and date (regardless of size bin)
+fish_density_grp <- fish %>%
+  expand(nesting(site, date, year, transect), group) %>%
+  left_join(fish %>%
               select(site, date, transect, group, count) %>%
               group_by(site, date, transect, group) %>%
               summarize(count = sum(count))) %>%
   mutate(count = if_else(is.na(count), 0, count), # replaces all entries not observed with 0
          density = count/60) %>%
-  group_by(site, date, group) %>%
+  group_by(site, date, year, group) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
             density_se = sd(density)/sqrt(n()))
 
-density_size <- fish_raw %>%
+ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
+  geom_col() +
+  facet_grid(site ~ group)
+
+# calculating density of fish groups of each size bin by site and date 
+fish_density_size <- fish %>%
   filter(group %in% c("Doctorfish", "Snapper")) %>%
-  expand(nesting(site, date, transect), group, size_bin) %>% # expand df to include all possible groups/size bins
-  left_join(fish_raw %>%
+  expand(nesting(site, date, year, transect), group, size_bin) %>% # expand df to include all possible groups/size bins
+  left_join(fish %>%
               filter(group %in% c("Doctorfish", "Snapper")) %>%
               select(site, date, transect, group, size_bin, count)) %>%
   mutate(count = if_else(is.na(count), 0, count),
          density = count/60) %>% 
-  group_by(site, date, group, size_bin) %>%
+  group_by(site, date, year, group, size_bin) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
             density_se = sd(density)/sqrt(n()))
+
+ggplot(fish_density_size, aes(x = size_bin, y = density_mean, fill = factor(year))) +
+  geom_col(position = "dodge") +
+  facet_grid(group ~ site) +
+  theme_bw()
 ```
 
 # Benthic
+What stats/graphs do we want?
+- mean macroalgal and turf canopy heights by site and date
+- photo transect data will be separate?
 ```{r}
 benthic <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "benthic") %>%  
-  clean_names()
+  clean_names() %>%
+   mutate(date = ymd(date),
+         year = year(date))
+
+benthic_heights <- benthic %>%
+  group_by(date, year, site, transect) %>%
+  summarize(ma_height = mean(macroalgal_height),
+            ta_height = mean(turf_algal_height)) %>%
+  group_by(date, year, site) %>%
+  summarize(ma_height_mean = mean(ma_height),
+            ma_height_se = sd(ma_height)/sqrt(n()),
+            ta_height_mean = mean(ta_height),
+            ta_height_se = sd(ta_height)/sqrt(n()))
+# mnaybe pivot_longer for algal type?
+
+ggplot(benthic_heights)
 ```
 
 # Invertebrates
+What stats/graphs do we want?
+- abundance by site over time
 ```{r}
 inverts <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "inverts") %>%  
   clean_names()
