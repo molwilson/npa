@@ -15,6 +15,7 @@ library(readxl)
 library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(lubridate) # for extracting different components of date data
+library(forcats) # for reordering variable names
 library(knitr) # for including tables
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -29,42 +30,70 @@ What stats/graphs do we want?
 
 To do list:
 
-* Add herbivore-specific
-* Add option for custom simple graphs of just one site/year
-* Can beautify plots
+* Add herbivore-specific graphs?
+
 ```{r}
-fish <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "fish") %>%  
+fish <- read_excel(here("reef monitoring", "data", "npa_ltm_test.xlsx"), sheet = "Fish Data Entry") %>%  
   clean_names() %>%
   mutate(date = ymd(date),
          year = year(date))
 
-fish_groups <- c("Doctorfish", "Snapper") # names of fish groups that have size data
+fish_groups <- c("Doctorfish", "Parrotfish", "Par (Rain, Mid, Blue)", "Damselfish", "Trigger/Box/Filefish", "Snappers", "Grunt/Porgy/Margate", "Coney", "Hind", "Nassau Grouper", "Barracuda", "Mackeral", "Jacks", "Lionfish") # names of fish groups that have size data
+
+fish_col <- geom_col(fill = "cadetblue", color = "black", alpha = 0.5)
 ```
 
 ### Density of all fish by site and year
-* This includes only fish - can change if we want to include the "other" section (turtles/sharks/etc.)
+* This includes only fish (not sharks, turtles, etc.)
 ```{r}
 # calculating density of all fish by site and date
 fish_density_tot <- fish %>%
   filter(group %in% fish_groups) %>%
-  group_by(date, year, transect) %>%
+  group_by(date, year, site, transect) %>%
   summarize(count_tot = sum(count),
             density = count_tot/60) %>%
-  group_by(date, year) %>%
+  group_by(date, year, site) %>%
   summarize(count_mean = mean(count_tot),
             density_mean = mean(density),
             density_se = sd(density)/sqrt(n()))
 
 ggplot(fish_density_tot, aes(x = as.character(year), y = density_mean)) +
-  geom_col() +
+  fish_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
+  facet_grid(. ~ site) +
   labs(x = "Year", y = expression(Density~(indv.~m^-2))) +
   theme_bw()
 ```
 
-### Density by group, site and year
+### Density by size, year, and site
 ```{r}
+# calculating density of fish groups of each size bin by site and date 
+fish_density_size <- fish %>%
+  expand(nesting(site, date, year, transect), size_bin) %>% # expand df to include all possible size bins
+  left_join(fish %>%
+              select(site, date, transect, size_bin, count)) %>%
+  mutate(count = if_else(is.na(count), 0, count),
+         density = count/60) %>% 
+  group_by(site, date, year, size_bin) %>%
+  summarize(count_mean = mean(count),
+            density_mean = mean(density),
+            density_se = sd(density)/sqrt(n())) %>%
+  mutate(size_bin = fct_relevel(size_bin, "0-5", "6-10", "11-20", "21-40"))
+
+ggplot(fish_density_size, aes(x = size_bin, y = density_mean)) +
+  fish_col +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(year ~ site) +
+  labs(x = "Length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+
+### Density by group, site and year
+```{r, fig.width = 12}
 # calculating density of each group by site and date (regardless of size bin)
 fish_density_grp <- fish %>%
   expand(nesting(site, date, year, transect), group) %>%
@@ -80,7 +109,7 @@ fish_density_grp <- fish %>%
             density_se = sd(density)/sqrt(n()))
 
 ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
-  geom_col() +
+  fish_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
   facet_grid(site ~ group) +
@@ -88,32 +117,47 @@ ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
   theme_bw()
 ```
 
-Density by group, size, and year (one figure per site)
-```{r}
+### Density by group, size, and year (one figure per site)
+
+#### Pillars:
+```{r, fig.width = 12}
 # calculating density of fish groups of each size bin by site and date 
-fish_density_size <- fish %>%
-  filter(group %in% c("Doctorfish", "Snapper")) %>%
+fish_density_grp_size <- fish %>%
   expand(nesting(site, date, year, transect), group, size_bin) %>% # expand df to include all possible groups/size bins
   left_join(fish %>%
-              filter(group %in% c("Doctorfish", "Snapper")) %>%
               select(site, date, transect, group, size_bin, count)) %>%
   mutate(count = if_else(is.na(count), 0, count),
          density = count/60) %>% 
   group_by(site, date, year, group, size_bin) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
-            density_se = sd(density)/sqrt(n()))
+            density_se = sd(density)/sqrt(n())) %>%
+  mutate(size_bin = fct_relevel(size_bin, "0-5", "6-10", "11-20", "21-40"))
 
-ggplot(fish_density_size %>% filter(site == "Pillars of Hercules"), aes(x = size_bin, y = density_mean)) +
-  geom_col() +
+ggplot(fish_density_grp_size %>% filter(site == "Pillars"), aes(x = size_bin, y = density_mean)) +
+  fish_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
-  facet_grid(group ~ year) +
+  facet_grid(year ~ group) +
   labs(x = "Length (cm)", y = expression(Density~(indv.~m^-2))) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-# Benthic
+#### Mermaids
+```{r, fig.width = 12}
+ggplot(fish_density_grp_size %>% filter(site == "Mermaids"), aes(x = size_bin, y = density_mean)) +
+  fish_col +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(year ~ group) +
+  labs(x = "Length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+## Benthic
 
 What stats/graphs do we want?
 
@@ -123,8 +167,13 @@ What stats/graphs do we want?
 benthic <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "benthic") %>%  
   clean_names() %>%
    mutate(date = ymd(date),
-         year = year(date))
+         year = as.character(year(date)))
 
+benthic_col <- geom_col(fill = "palegreen4", color = "black", alpha = 0.5)
+```
+
+
+```{r}
 benthic_heights <- benthic %>%
   pivot_longer(cols = ends_with("height"), #turn two algal height columns into two rows, will help for graphs/analysis
                names_to = "algal_type", # create column to distinguish whether height is macroalgae vs turf algae
@@ -137,16 +186,16 @@ benthic_heights <- benthic %>%
             height_se = sd(height)/sqrt(n()))
 
 ggplot(benthic_heights %>%
-         mutate(algal_type = to_any_case(algal_type, case = "title")), aes(x = algal_type, y = height_mean)) +
-  geom_col() +
+         mutate(algal_type = to_any_case(algal_type, case = "title")), aes(x = year, y = height_mean)) +
+  benthic_col +
   geom_errorbar(aes(ymin = height_mean - height_se, ymax = height_mean + height_se), width = .2,
                  position = position_dodge(.9)) +
-  facet_grid(site ~ year) +
+  facet_grid(site ~ algal_type) +
   labs(x = "Algal type", y = "Canopy height (mm)") +
   theme_bw()
 ```
 
-# Invertebrates
+## Invertebrates
 
 What stats/graphs do we want?
 
@@ -157,6 +206,11 @@ inverts <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "
   mutate(date = ymd(date),
          year = year(date))
 
+invert_col <- geom_col(fill = "sienna", color = "black", alpha = 0.5)
+```
+
+
+```{r}
 invert_density <- inverts %>%
   expand(nesting(site, date, year, transect), group) %>%
   left_join(inverts %>%
@@ -168,7 +222,7 @@ invert_density <- inverts %>%
             density_se = sd(density)/sqrt(n()))
 
 ggplot(invert_density, aes(x = factor(year), y = density_mean)) +
-  geom_col() +
+  invert_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
   facet_grid(site ~ group) +
