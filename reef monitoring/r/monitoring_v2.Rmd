@@ -9,10 +9,10 @@ output:
 # {.tabset}
 
 ```{r, message = F, warning = F, echo = F}
-library(tidyverse)
-library(here) 
-library(readxl) 
-library(janitor)
+library(tidyverse) # for all basic tools
+library(here) # for linking files within folder organization
+library(readxl) # for reading sheets within excel files
+library(janitor) # for cleaning headings/cases etc.
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(lubridate) # for extracting different components of date data
 library(forcats) # for reordering variable names
@@ -33,14 +33,15 @@ To do list:
 * Add herbivore-specific graphs?
 
 ```{r}
-fish <- read_excel(here("reef monitoring", "data", "npa_ltm_test.xlsx"), sheet = "Fish Data Entry") %>%  
+fish <- read_excel(here("reef monitoring", "data", "npa_ltm_test.xlsx"), sheet = "Fish Data Entry") %>% # set this to location of data file or import manually
   clean_names() %>%
   mutate(date = ymd(date),
          year = year(date))
 
 fish_groups <- c("Doctorfish", "Parrotfish", "Par (Rain, Mid, Blue)", "Damselfish", "Trigger/Box/Filefish", "Snappers", "Grunt/Porgy/Margate", "Coney", "Hind", "Nassau Grouper", "Barracuda", "Mackeral", "Jacks", "Lionfish") # names of fish groups that have size data
 
-fish_col <- geom_col(fill = "cadetblue", color = "black", alpha = 0.5)
+fish_col <- geom_col(fill = "cadetblue", color = "black", alpha = 0.5) # setting standard color for the fish 
+fish_belt_area <- 30*2 # 30m x 2m belt transects
 ```
 
 ### Density of all fish by site and year
@@ -51,7 +52,7 @@ fish_density_tot <- fish %>%
   filter(group %in% fish_groups) %>%
   group_by(date, year, site, transect) %>%
   summarize(count_tot = sum(count),
-            density = count_tot/60) %>%
+            density = count_tot / fish_belt_area) %>%
   group_by(date, year, site) %>%
   summarize(count_mean = mean(count_tot),
             density_mean = mean(density),
@@ -74,7 +75,7 @@ fish_density_size <- fish %>%
   left_join(fish %>%
               select(site, date, transect, size_bin, count)) %>%
   mutate(count = if_else(is.na(count), 0, count),
-         density = count/60) %>% 
+         density = count/fish_belt_area) %>% 
   group_by(site, date, year, size_bin) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
@@ -102,7 +103,7 @@ fish_density_grp <- fish %>%
               group_by(site, date, transect, group) %>%
               summarize(count = sum(count))) %>%
   mutate(count = if_else(is.na(count), 0, count), # replaces all entries not observed with 0
-         density = count/60) %>%
+         density = count/fish_belt_area) %>%
   group_by(site, date, year, group) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
@@ -119,7 +120,7 @@ ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
 
 ### Density by group, size, and year (one figure per site)
 
-#### Pillars:
+#### "Pillars":
 ```{r, fig.width = 12}
 # calculating density of fish groups of each size bin by site and date 
 fish_density_grp_size <- fish %>%
@@ -127,7 +128,7 @@ fish_density_grp_size <- fish %>%
   left_join(fish %>%
               select(site, date, transect, group, size_bin, count)) %>%
   mutate(count = if_else(is.na(count), 0, count),
-         density = count/60) %>% 
+         density = count/fish_belt_area) %>% 
   group_by(site, date, year, group, size_bin) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
@@ -135,18 +136,6 @@ fish_density_grp_size <- fish %>%
   mutate(size_bin = fct_relevel(size_bin, "0-5", "6-10", "11-20", "21-40"))
 
 ggplot(fish_density_grp_size %>% filter(site == "Pillars"), aes(x = size_bin, y = density_mean)) +
-  fish_col +
-  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
-                 position = position_dodge(.9)) +
-  facet_grid(year ~ group) +
-  labs(x = "Length (cm)", y = expression(Density~(indv.~m^-2))) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-#### Mermaids
-```{r, fig.width = 12}
-ggplot(fish_density_grp_size %>% filter(site == "Mermaids"), aes(x = size_bin, y = density_mean)) +
   fish_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
@@ -207,6 +196,7 @@ inverts <- read_excel(here("reef monitoring", "data", "npa_ltm.xlsx"), sheet = "
          year = year(date))
 
 invert_col <- geom_col(fill = "sienna", color = "black", alpha = 0.5)
+invert_belt_area <- 10*2 # 10m x 2m belt
 ```
 
 
@@ -215,7 +205,8 @@ invert_density <- inverts %>%
   expand(nesting(site, date, year, transect), group) %>%
   left_join(inverts %>%
               select(site, date, year, transect, group, count)) %>%
-  mutate(density = count / 60) %>%
+  mutate(density = count / invert_belt_area) %>%
+  mutate(density = if_else(is.na(density), 0, density)) %>%
   group_by(date, year, site, group) %>%
   summarize(count_mean = mean(count),
             density_mean = mean(density),
