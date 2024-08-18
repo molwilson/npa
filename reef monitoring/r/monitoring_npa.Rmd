@@ -1,7 +1,7 @@
 ---
 title: "NPA long-term reef monitoring"
 author: "Molly Wilson"
-date: "7/20/2022"
+date: "6/26/2023"
 output: 
   html_document:
     code_folding: hide
@@ -22,23 +22,13 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 ## Fish
 
-What stats/graphs do we want?
-
-* Overall abundance by group at each site/date
-* Overall abundance by group over time (panel?)
-* Size distributions within each group (panel)
-
-To do list:
-
-* Add herbivore-specific graphs?
-
 ```{r}
-fish <- read_excel(here("reef monitoring", "data", "rd_fish.xlsx"), sheet = "fish") %>% # set this to location of data file or import manually
+fish <- read_excel(here("reef monitoring", "data", "npa_fish.xlsx"), sheet = "NDNP Marine") %>% # set this to location of data file or import manually, should finalize how we will store multiple dates, etc.
   clean_names() %>%
   mutate(date = ymd(date),
          year = year(date))
 
-fish_groups <- c("Doctorfish", "Parrotfish", "Par (Rain, Mid, Blue)", "Damselfish", "Trigger/Box/Filefish", "Snappers", "Grunt/Porgy/Margate", "Coney", "Hind", "Nassau Grouper", "Barracuda", "Mackeral", "Jacks", "Lionfish") # names of fish groups that have size data
+fish_groups <- c("Doctorfish", "Parrotfish", "Par/Rain/Blue/Mid)", "Damselfish", "Trigger/Box/File", "Snappers", "Grunt/Porgy/Margate", "Coney", "Hind", "Nassau Grouper", "Barracuda", "Mackeral", "Jacks", "Lionfish") # names of fish groups that have size data
 
 fish_col <- geom_col(fill = "cadetblue", color = "black", alpha = 0.5) # setting standard color for the fish 
 fish_belt_area <- 30*2 # 30m x 2m belt transects
@@ -121,7 +111,7 @@ ggplot(fish_density_grp, aes(x = factor(year), y = density_mean)) +
 
 ### Density by group, size, and year (one figure per site)
 
-#### "RDAB07":
+#### "Blacks Point":
 ```{r, fig.width = 12}
 # calculating density of fish groups of each size bin by site and date 
 fish_density_grp_size <- fish %>%
@@ -136,7 +126,7 @@ fish_density_grp_size <- fish %>%
             density_se = sd(density)/sqrt(n())) %>%
   mutate(size_bin = fct_relevel(size_bin, "0-5", "6-10", "11-20", "21-40"))
 
-ggplot(fish_density_grp_size %>% filter(site == "RDAB07"), aes(x = size_bin, y = density_mean)) +
+ggplot(fish_density_grp_size %>% filter(site == "Blacks Point"), aes(x = size_bin, y = density_mean)) +
   fish_col +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
